@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>用户研究：视频主观评测</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 30px 40px;
+  background: #f7f7f7;
+  color: #222;
+}
+
+h2 { text-align: center; }
+p { text-align: center; line-height: 1.6; }
+
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px 32px;
+  margin-top: 30px;
+}
+
+.scene {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  padding: 12px 12px 16px;
+}
+
+.scene-title { font-weight: bold; margin-bottom: 6px; }
+
+.scene video {
+  width: 100%;
+  border-radius: 6px;
+  background: #000;
+}
+
+.rating-block { margin-top: 10px; font-size: 13px; }
+.rating-label { margin-bottom: 4px; }
+
+.rating-options {
+  display: flex;
+  gap: 8px;
+}
+
+.rating-options label {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #999;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.rating-options input { display: none; }
+
+.rating-options input:checked + span {
+  background: #2563eb;
+  color: #fff;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.buttons {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.buttons button {
+  padding: 10px 26px;
+  margin: 0 6px;
+  border-radius: 6px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.buttons button:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+
+.buttons button:hover:not(:disabled) {
+  background: #1e4ed8;
+}
+</style>
+</head>
+
+<body>
+
+<h2>用户研究：视频主观评测</h2>
+<p>
+每页为一个 prompt，包含 4 个方法视频（2×2）<br>
+页面加载后视频将自动循环播放（静音）
+</p>
+
+<p id="pageScene"></p>
+
+<div class="scene-grid">
+  <div class="scene">
+    <div class="scene-title">视频 A</div>
+    <video id="video-0" muted playsinline loop></video>
+    <div class="rating-block">
+      <div class="rating-label">文本对齐度</div>
+      <div class="rating-options" data-video="0" data-type="align"></div>
+    </div>
+    <div class="rating-block">
+      <div class="rating-label">物理合理性</div>
+      <div class="rating-options" data-video="0" data-type="quality"></div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-title">视频 B</div>
+    <video id="video-1" muted playsinline loop></video>
+    <div class="rating-block">
+      <div class="rating-label">文本对齐度</div>
+      <div class="rating-options" data-video="1" data-type="align"></div>
+    </div>
+    <div class="rating-block">
+      <div class="rating-label">物理合理性</div>
+      <div class="rating-options" data-video="1" data-type="quality"></div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-title">视频 C</div>
+    <video id="video-2" muted playsinline loop></video>
+    <div class="rating-block">
+      <div class="rating-label">文本对齐度</div>
+      <div class="rating-options" data-video="2" data-type="align"></div>
+    </div>
+    <div class="rating-block">
+      <div class="rating-label">物理合理性</div>
+      <div class="rating-options" data-video="2" data-type="quality"></div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-title">视频 D</div>
+    <video id="video-3" muted playsinline loop></video>
+    <div class="rating-block">
+      <div class="rating-label">文本对齐度</div>
+      <div class="rating-options" data-video="3" data-type="align"></div>
+    </div>
+    <div class="rating-block">
+      <div class="rating-label">物理合理性</div>
+      <div class="rating-options" data-video="3" data-type="quality"></div>
+    </div>
+  </div>
+</div>
+
+<div class="buttons">
+  <button id="prevBtn" onclick="goPrev()">← 上一页</button>
+  <button id="actionBtn" onclick="handleAction()">保存并下一页</button>
+</div>
+
+<script>
+/* ===== prompt ===== */
+const scenes = [
+  "一名男子用脚轻轻踢开箱子。",
+  "一名男子将椅子抬起并放到另一边。",
+  "一名男子检查灭火器压力表。",
+  "一名男子推着行李箱向前走。",
+  "一个男人坐着弹吉他。",
+  "一个男人用脚轻轻踢枕头。",
+  "一名男子弯腰单手提起医疗箱。"
+];
+
+/* ===== 方法名（顺序与视频一致） ===== */
+const methodNames = ["Ours", "HOI-Diff", "HOI-Diff+", "CHOIS"];
+
+/* ===== 视频路径 ===== */
+const videos = [
+  [
+    "video/ours/boxlarge_4_fixed.mp4",
+    "video/hoi_diff/boxlarge_4.mp4",
+    "video/hoi_diff_/boxlarge_4.mp4",
+    "video/chois/boxlarge_4.mp4"
+  ],
+  [
+    "video/ours/chairwood_1_fixed.mp4",
+    "video/hoi_diff/chairwood_1.mp4",
+    "video/hoi_diff_/chairwood_1.mp4",
+    "video/chois/chairwood_1.mp4"
+  ],
+  [
+    "video/ours/fire_extinguisher_2_fixed.mp4",
+    "video/hoi_diff/fire_extinguisher_2.mp4",
+    "video/hoi_diff_/fire_extinguisher_2.mp4",
+    "video/chois/fire_extinguisher_2.mp4"
+  ],
+  [
+    "video/ours/green_suitcase_7_fixed.mp4",
+    "video/hoi_diff/green_suitcase_7.mp4",
+    "video/hoi_diff_/green_suitcase_7.mp4",
+    "video/chois/green_suitcase_7.mp4"
+  ],
+  [
+    "video/ours/guitar_1_fixed.mp4",
+    "video/hoi_diff/guitar_1.mp4",
+    "video/hoi_diff_/guitar_1.mp4",
+    "video/chois/guitar_1.mp4"
+  ],
+  [
+    "video/ours/pillow_2_fixed.mp4",
+    "video/hoi_diff/pillow_2.mp4",
+    "video/hoi_diff_/pillow_2.mp4",
+    "video/chois/pillow_2.mp4"
+  ],
+  [
+    "video/ours/tool_box_intercap_5_fixed.mp4",
+    "video/hoi_diff/tool_box_intercap_5.mp4",
+    "video/hoi_diff_/tool_box_intercap_5.mp4",
+    "video/chois/tool_box_intercap_5.mp4"
+  ]
+];
+
+let current = 0;
+const results = [];
+const videoEls = [...Array(4)].map((_,i)=>document.getElementById(`video-${i}`));
+
+function initRatings() {
+  document.querySelectorAll(".rating-options").forEach(b=>{
+    b.innerHTML="";
+    const name=`s${current}_v${b.dataset.video}_${b.dataset.type}`;
+    for(let i=1;i<=5;i++){
+      const l=document.createElement("label");
+      const inp=document.createElement("input");
+      inp.type="radio"; inp.name=name; inp.value=i;
+      const s=document.createElement("span"); s.textContent=i;
+      l.appendChild(inp); l.appendChild(s); b.appendChild(l);
+    }
+  });
+}
+
+function autoPlay() {
+  videoEls.forEach((v,i)=>{
+    const play = ()=>v.play().catch(()=>{});
+    i===0 ? setTimeout(play,120) : play();
+  });
+}
+
+(function debugVideoA(){
+  const v = document.getElementById("video-0");
+  if (!v) {
+    console.warn("[VideoA] video-0 not found");
+    return;
+  }
+
+  const log = (msg) => {
+    console.log(`[VideoA] ${msg}`, {
+      src: v.currentSrc || v.src,
+      readyState: v.readyState,
+      networkState: v.networkState,
+      paused: v.paused,
+      ended: v.ended,
+      error: v.error
+    });
+  };
+
+  v.addEventListener("loadstart",   () => log("loadstart"));
+  v.addEventListener("loadedmetadata", () => log("loadedmetadata"));
+  v.addEventListener("loadeddata",  () => log("loadeddata"));
+  v.addEventListener("canplay",     () => log("canplay"));
+  v.addEventListener("canplaythrough", () => log("canplaythrough"));
+  v.addEventListener("play",        () => log("play"));
+  v.addEventListener("playing",     () => log("playing"));
+  v.addEventListener("pause",       () => log("pause"));
+  v.addEventListener("ended",       () => log("ended"));
+  v.addEventListener("stalled",     () => log("stalled"));
+  v.addEventListener("waiting",     () => log("waiting"));
+  v.addEventListener("suspend",     () => log("suspend"));
+  v.addEventListener("error", () => {
+    console.error("[VideoA] ERROR", v.error);
+  });
+})();
+
+function loadScene(){
+  document.getElementById("pageScene").textContent =
+    `当前 prompt（${current+1}/7）：${scenes[current]}`;
+
+  videos[current].forEach((src,i)=>{
+    videoEls[i].pause();
+    videoEls[i].src = src;
+    videoEls[i].load();
+  });
+
+  initRatings();
+  setTimeout(autoPlay,200);
+
+  document.getElementById("actionBtn").textContent =
+    (current===scenes.length-1) ? "保存并导出" : "保存并下一页";
+  document.getElementById("prevBtn").disabled = (current===0);
+}
+
+function goPrev(){
+  if(current===0) return;
+  current--;
+  loadScene();
+}
+
+function handleAction(){
+  for(let i=0;i<4;i++){
+    const a=document.querySelector(`input[name^="s${current}_v${i}_align"]:checked`);
+    const q=document.querySelector(`input[name^="s${current}_v${i}_quality"]:checked`);
+    if(!a||!q){ alert("请完成所有评分"); return; }
+
+    results.push({
+      sceneIndex: current,
+      prompt: scenes[current],
+      method: methodNames[i],
+      alignment: a.value,
+      quality: q.value
+    });
+  }
+
+  if(current===scenes.length-1){
+    exportCSV();
+  } else {
+    current++;
+    loadScene();
+  }
+}
+
+function exportCSV(){
+  let csv="scene_index,prompt,method,alignment,quality,timestamp\n";
+  const t=new Date().toISOString();
+  results.forEach(r=>{
+    csv+=`${r.sceneIndex},"${r.prompt}",${r.method},${r.alignment},${r.quality},${t}\n`;
+  });
+  const blob=new Blob([csv],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="user_study_results.csv";
+  a.click();
+}
+
+loadScene();
+</script>
+
+</body>
+</html>
